@@ -1,0 +1,23 @@
+# Environments & Virtual Envs
+venv/
+backend/venv/
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Python Cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node Modules & Build
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.DS_Store
+
+# Uploaded Proof Photos (preserve directory)
+backend/uploads/proof_*
+!backend/uploads/.gitkeep
