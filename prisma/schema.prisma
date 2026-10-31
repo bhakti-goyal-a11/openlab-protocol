@@ -8,46 +8,14 @@ generator client {
 }
 
 // ==========================================
-// ENUMS
-// ==========================================
-
-enum Role {
-  STUDENT
-  LAB_MANAGER
-  ADMIN
-}
-
-enum BookingStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  WAITLISTED
-  ACTIVE
-  RETURNED
-  DISPUTED
-  CANCELLED
-}
-
-enum InspectionStage {
-  CHECK_IN
-  CHECK_OUT
-}
-
-enum DisputeSeverity {
-  LOW
-  MEDIUM
-  CRITICAL
-}
-
-// ==========================================
-// MODELS
+// MODELS (SQLite Native Compatible)
 // ==========================================
 
 model User {
   id                  String            @id @default(cuid())
   email               String            @unique
   fullName            String
-  role                Role              @default(STUDENT)
+  role                String            @default("STUDENT") // STUDENT | LAB_MANAGER | ADMIN
   department          String
   trustScore          Float             @default(75.0)
   academicNeedWeight  Float             @default(1.0)
@@ -125,7 +93,7 @@ model BookingRequest {
   academicContext         String
   calculatedPriorityScore Float            @default(0.0)
   explainabilityReceipt   String
-  status                  BookingStatus    @default(PENDING)
+  status                  String           @default("PENDING") // PENDING | APPROVED | REJECTED | WAITLISTED | ACTIVE | RETURNED | DISPUTED | CANCELLED
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
 
@@ -143,7 +111,7 @@ model BookingRequest {
 model InspectionLog {
   id                 String           @id @default(cuid())
   bookingId          String
-  stage              InspectionStage
+  stage              String           // CHECK_IN | CHECK_OUT
   signedByUserId     String
   payloadHash        String
   checklistVector    String           // JSON: {"collet_clean": true}
@@ -163,7 +131,7 @@ model DisputeTicket {
   bookingId          String           @unique
   reporterId         String
   arbiterId          String?
-  severity           DisputeSeverity  @default(MEDIUM)
+  severity           String           @default("MEDIUM") // LOW | MEDIUM | CRITICAL
   damageSummary      String
   evidenceImageUrls  String
   trustScorePenalty  Float            @default(0.0)
@@ -196,4 +164,3 @@ model AuditLedger {
   @@index([eventType])
   @@index([timestamp])
 }
-

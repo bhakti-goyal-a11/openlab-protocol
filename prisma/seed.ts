@@ -48,6 +48,7 @@ export async function seedDatabase() {
   // 1. Aarav Verma: High-Trust Certified Student
   const aarav = await prisma.user.create({
     data: {
+      id: 'user_aarav',
       email: 'aarav@univ.edu',
       fullName: 'Aarav Verma',
       role: 'STUDENT',
@@ -60,6 +61,7 @@ export async function seedDatabase() {
   // 2. Priya Nair: Uncertified Student
   const priya = await prisma.user.create({
     data: {
+      id: 'user_priya',
       email: 'priya@univ.edu',
       fullName: 'Priya Nair',
       role: 'STUDENT',
@@ -72,6 +74,7 @@ export async function seedDatabase() {
   // 3. Prof. Rajesh Sharma: Lab Custodian & PI
   const sharma = await prisma.user.create({
     data: {
+      id: 'user_sharma',
       email: 'sharma@univ.edu',
       fullName: 'Prof. Rajesh Sharma',
       role: 'LAB_MANAGER',
@@ -84,6 +87,7 @@ export async function seedDatabase() {
   // 4. Dean Vandana Rao: Institutional Auditor & Provost
   const vandana = await prisma.user.create({
     data: {
+      id: 'user_vandana',
       email: 'vandana@univ.edu',
       fullName: 'Dean Vandana Rao',
       role: 'ADMIN',
@@ -106,14 +110,15 @@ export async function seedDatabase() {
 
   console.log('--- Creating 4 Realistic Lab Resources ---');
   // 1. Tormach PCNC 1100 Milling Machine
-  await prisma.resource.create({
+  const resCnc = await prisma.resource.create({
     data: {
+      id: 'res_tormach_cnc',
       name: 'Tormach PCNC 1100 Milling Machine',
       category: 'Subtractive CNC',
       custodianId: sharma.id,
       location: 'Fabrication Shop Bay 4',
-      description: 'High-precision 4-axis mill for aerospace alloys and metals.',
-      imageUrl: '/demo-assets/cnc-baseline.png',
+      description: 'High-precision 4-axis mill for aerospace alloys, carbon fiber, and metals.',
+      imageUrl: '/demo-assets/cnc-baseline.svg',
       requiredBadges: JSON.stringify(['BADGE_CNC_1', 'BADGE_SAFETY_101']),
       supervisorRequired: true,
       maxWeeklyHoursPerUser: 6,
@@ -125,12 +130,13 @@ export async function seedDatabase() {
   // 2. Stratasys F370 Industrial 3D Printer
   await prisma.resource.create({
     data: {
+      id: 'res_stratasys_3d',
       name: 'Stratasys F370 Industrial 3D Printer',
       category: 'Additive Manufacturing',
       custodianId: sharma.id,
       location: 'Rapid Prototyping Center',
-      description: 'High-temperature industrial dual-extrusion FDM/SLA printer.',
-      imageUrl: '/demo-assets/3dprinter-baseline.png',
+      description: 'High-temperature industrial dual-extrusion FDM/SLA printer with soluble support.',
+      imageUrl: '/demo-assets/cnc-baseline.svg',
       requiredBadges: JSON.stringify(['BADGE_3D_PRINT_1']),
       supervisorRequired: false,
       maxWeeklyHoursPerUser: 8,
@@ -142,12 +148,13 @@ export async function seedDatabase() {
   // 3. Keysight Infiniium 4-Channel DSO
   await prisma.resource.create({
     data: {
+      id: 'res_keysight_dso',
       name: 'Keysight Infiniium 4-Channel DSO',
       category: 'Electronics & Test',
       custodianId: sharma.id,
       location: 'Microwave & RF Test Bench',
-      description: '4GHz 20GSa/s mixed-signal digital storage oscilloscope.',
-      imageUrl: '/demo-assets/oscilloscope-baseline.png',
+      description: '4GHz 20GSa/s mixed-signal digital storage oscilloscope with protocol decode.',
+      imageUrl: '/demo-assets/cnc-baseline.svg',
       requiredBadges: JSON.stringify(['BADGE_SAFETY_101']),
       supervisorRequired: false,
       maxWeeklyHoursPerUser: 10,
@@ -159,13 +166,14 @@ export async function seedDatabase() {
   // 4. NVIDIA DGX H100 GPU Node
   await prisma.resource.create({
     data: {
+      id: 'res_nvidia_h100',
       name: 'NVIDIA DGX H100 GPU Node',
       category: 'High Performance Compute',
       custodianId: sharma.id,
       location: 'AI Research Datacenter Rack 2',
-      description: '8x NVIDIA H100 SXM5 80GB GPUs with NVLink for AI training.',
-      imageUrl: '/demo-assets/gpu-node.png',
-      requiredBadges: JSON.stringify([]), // No hardware badge; access gated by trust score > 80
+      description: '8x NVIDIA H100 SXM5 80GB GPUs with NVLink for LLM and scientific AI training.',
+      imageUrl: '/demo-assets/cnc-baseline.svg',
+      requiredBadges: JSON.stringify([]),
       supervisorRequired: false,
       maxWeeklyHoursPerUser: 12,
       slotDurationMinutes: 180,
@@ -173,19 +181,27 @@ export async function seedDatabase() {
     }
   });
 
+  // Pre-seed an initial audit ledger genesis entry
+  await prisma.auditLedger.create({
+    data: {
+      eventType: 'SYSTEM_GENESIS',
+      actorId: vandana.id,
+      payloadSnapshot: JSON.stringify({ message: 'OpenLab Protocol Node Initialized', nodeVersion: '1.0.0' }),
+      previousLedgerHash: '0000000000000000000000000000000000000000000000000000000000000000',
+      currentEntryHash: '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
+      timestamp: new Date()
+    }
+  });
+
   console.log('--- Seed Completed Successfully ---');
   console.log(`Personas seeded: Aarav (${aarav.id}), Priya (${priya.id}), Prof. Sharma (${sharma.id}), Dean Vandana (${vandana.id})`);
 }
 
-// Auto-run if executed directly
-if (require.main === module) {
-  seedDatabase()
-    .catch((e) => {
-      console.error('Seed execution failed:', e);
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
-}
-
+seedDatabase()
+  .catch((e) => {
+    console.error('Seed execution failed:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
