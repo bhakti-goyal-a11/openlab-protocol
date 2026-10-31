@@ -1,0 +1,199 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  STUDENT
+  LAB_MANAGER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WAITLISTED
+  ACTIVE
+  RETURNED
+  DISPUTED
+  CANCELLED
+}
+
+enum InspectionStage {
+  CHECK_IN
+  CHECK_OUT
+}
+
+enum DisputeSeverity {
+  LOW
+  MEDIUM
+  CRITICAL
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+model User {
+  id                  String            @id @default(cuid())
+  email               String            @unique
+  fullName            String
+  role                Role              @default(STUDENT)
+  department          String
+  trustScore          Float             @default(75.0)
+  academicNeedWeight  Float             @default(1.0)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  badges              UserBadge[]
+  managedResources    Resource[]        @relation("ResourceCustodian")
+  bookings            BookingRequest[]  @relation("BorrowerBookings")
+  signedInspections   InspectionLog[]   @relation("InspectorSignature")
+  reportedDisputes    DisputeTicket[]   @relation("DisputeReporter")
+  adjudicatedDisputes DisputeTicket[]   @relation("DisputeArbiter")
+  auditActions        AuditLedger[]     @relation("AuditActor")
+
+  @@index([role])
+  @@index([trustScore])
+}
+
+model PrerequisiteBadge {
+  id           String      @id @default(cuid())
+  code         String      @unique
+  title        String
+  description  String
+  department   String
+  validityDays Int         @default(365)
+  createdAt    DateTime    @default(now())
+
+  users        UserBadge[]
+}
+
+model UserBadge {
+  id          String            @id @default(cuid())
+  userId      String
+  badgeId     String
+  issuedAt    DateTime          @default(now())
+  expiresAt   DateTime
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge       PrerequisiteBadge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+}
+
+model Resource {
+  id                      String           @id @default(cuid())
+  name                    String
+  category                String
+  custodianId             String
+  location                String
+  description             String
+  imageUrl                String
+  requiredBadges          String           // JSON string: ["BADGE_CNC_1"]
+  supervisorRequired      Boolean          @default(false)
+  maxWeeklyHoursPerUser   Int              @default(6)
+  slotDurationMinutes     Int              @default(120)
+  isAvailable             Boolean          @default(true)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  custodian               User             @relation("ResourceCustodian", fields: [custodianId], references: [id])
+  bookings                BookingRequest[]
+
+  @@index([category])
+  @@index([custodianId])
+}
+
+model BookingRequest {
+  id                      String           @id @default(cuid())
+  resourceId              String
+  borrowerId              String
+  startTime               DateTime
+  endTime                 DateTime
+  purposeDescription      String
+  academicContext         String
+  calculatedPriorityScore Float            @default(0.0)
+  explainabilityReceipt   String
+  status                  BookingStatus    @default(PENDING)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  resource                Resource         @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  borrower                User             @relation("BorrowerBookings", fields: [borrowerId], references: [id], onDelete: Restrict)
+  inspections             InspectionLog[]
+  dispute                 DisputeTicket?
+  auditRecords            AuditLedger[]
+
+  @@index([resourceId, startTime, endTime])
+  @@index([borrowerId])
+  @@index([status])
+}
+
+model InspectionLog {
+  id                 String           @id @default(cuid())
+  bookingId          String
+  stage              InspectionStage
+  signedByUserId     String
+  payloadHash        String
+  checklistVector    String           // JSON: {"collet_clean": true}
+  imageUrls          String           // JSON: ["https://..."]
+  notes              String           @default("")
+  timestamp          DateTime         @default(now())
+
+  booking            BookingRequest   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  signedByUser       User             @relation("InspectorSignature", fields: [signedByUserId], references: [id])
+
+  @@unique([bookingId, stage])
+  @@index([bookingId])
+}
+
+model DisputeTicket {
+  id                 String           @id @default(cuid())
+  bookingId          String           @unique
+  reporterId         String
+  arbiterId          String?
+  severity           DisputeSeverity  @default(MEDIUM)
+  damageSummary      String
+  evidenceImageUrls  String
+  trustScorePenalty  Float            @default(0.0)
+  resolutionNotes    String?
+  isResolved         Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  resolvedAt         DateTime?
+
+  booking            BookingRequest   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  reporter           User             @relation("DisputeReporter", fields: [reporterId], references: [id])
+  arbiter            User?            @relation("DisputeArbiter", fields: [arbiterId], references: [id])
+
+  @@index([reporterId])
+  @@index([isResolved])
+}
+
+model AuditLedger {
+  id                 String           @id @default(cuid())
+  bookingId          String?
+  eventType          String
+  actorId            String
+  payloadSnapshot    String
+  previousLedgerHash String
+  currentEntryHash   String
+  timestamp          DateTime         @default(now())
+
+  booking            BookingRequest?  @relation(fields: [bookingId], references: [id])
+  actor              User             @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([eventType])
+  @@index([timestamp])
+}
+
