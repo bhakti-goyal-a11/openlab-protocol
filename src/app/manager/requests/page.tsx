@@ -16,7 +16,9 @@ import {
   Check,
   X,
   MapPin,
-  Calendar
+  Calendar,
+  Sparkles,
+  ArrowRight
 } from "lucide-react";
 
 interface PendingRequest {
@@ -38,7 +40,7 @@ interface PendingRequest {
 }
 
 export default function ManagerRequestsPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, switchPersona } = useAuth();
 
   const [requests, setRequests] = useState<PendingRequest[]>([
     {
@@ -97,8 +99,10 @@ export default function ManagerRequestsPage() {
     }
   };
 
+  const isStudent = currentUser.role === "STUDENT";
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -108,7 +112,7 @@ export default function ManagerRequestsPage() {
               FACILITY GOVERNANCE DESK
             </span>
             <span className="text-xs text-slate-400 font-mono">
-              Custodian: {currentUser.fullName} ({currentUser.department})
+              Operating As: {currentUser.fullName} ({currentUser.role})
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-100 tracking-tight mt-1">
@@ -119,15 +123,35 @@ export default function ManagerRequestsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900 px-3.5 py-2 rounded-xl border border-zinc-800">
+        <div className="flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900 px-3.5 py-2 rounded-xl border border-zinc-800 shrink-0 self-start sm:self-auto">
           <Inbox className="w-4 h-4 text-emerald-400" />
           <span>Pending Approvals: {requests.length}</span>
         </div>
       </div>
 
+      {/* Role Notice Helper for Student Persona */}
+      {isStudent && (
+        <div className="p-3.5 rounded-2xl bg-slate-900 border border-cyan-800/60 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2 text-cyan-300">
+            <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>
+              You are currently logged in as <strong>{currentUser.fullName} (Student)</strong>. To evaluate approvals with full Custodian authority:
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => switchPersona("user_sharma")}
+            className="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shrink-0 transition-all hover:scale-105 cursor-pointer"
+          >
+            <span>Switch to Prof. Sharma</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Notification Toast */}
       {notification && (
-        <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+        <div className="p-4 rounded-2xl bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200 shadow-xl">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{notification}</span>
         </div>
@@ -136,18 +160,46 @@ export default function ManagerRequestsPage() {
       {/* Requests List */}
       <div className="space-y-4">
         {requests.length === 0 ? (
-          <div className="p-12 text-center rounded-3xl bg-slate-900/60 border border-zinc-800 space-y-2">
-            <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+          <div className="p-12 text-center rounded-3xl bg-slate-900/60 border border-zinc-800 space-y-3">
+            <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
             <h3 className="text-base font-bold text-slate-200">Inbox Completely Cleared</h3>
-            <p className="text-xs text-slate-400">All inbound equipment reservations have been evaluated and committed.</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              All inbound equipment reservations have been evaluated, certified, and committed to the protocol audit ledger.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setRequests([
+                  {
+                    id: "req_incoming_1",
+                    applicantName: "Aarav Verma",
+                    applicantRole: "STUDENT",
+                    applicantDepartment: "Mechatronics & Robotics",
+                    applicantTrustScore: 96.5,
+                    applicantBadges: ["BADGE_CNC_1", "BADGE_SAFETY_101", "BADGE_3D_PRINT_1"],
+                    resourceName: "Tormach PCNC 1100 Milling Machine",
+                    resourceCategory: "Subtractive CNC",
+                    location: "Fabrication Shop Bay 4",
+                    requestedSlot: "Today, 02:00 PM - 04:00 PM",
+                    purpose: "Autonomous Rover Chassis Machining & Tolerance Verification (Capstone milestone in 14 days)",
+                    academicContext: "CAPSTONE",
+                    priorityScore: 61.1,
+                    hasConflict: false
+                  }
+                ]);
+              }}
+              className="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+            >
+              Reset Sample Request
+            </button>
           </div>
         ) : (
           requests.map((req) => (
             <div
               key={req.id}
-              className={`p-6 rounded-3xl bg-slate-900 border transition-all space-y-4 shadow-xl ${
+              className={`p-6 rounded-3xl bg-slate-900/90 border transition-all space-y-4 shadow-xl backdrop-blur-md ${
                 req.hasConflict
-                  ? "border-amber-700/60 bg-slate-900/90"
+                  ? "border-amber-700/60"
                   : "border-zinc-800 hover:border-zinc-700"
               }`}
             >
@@ -191,12 +243,12 @@ export default function ManagerRequestsPage() {
                 </div>
 
                 {/* Priority Score Stamp */}
-                <div className="text-right shrink-0">
-                  <div className="px-3 py-1.5 rounded-xl bg-violet-950/70 border border-violet-800/60 inline-block text-right">
-                    <div className="text-[10px] font-mono uppercase text-violet-400">
+                <div className="text-left md:text-right shrink-0">
+                  <div className="px-3.5 py-2 rounded-xl bg-violet-950/70 border border-violet-800/60 inline-block">
+                    <div className="text-[10px] font-mono uppercase text-violet-400 font-bold">
                       Fair-Share Score
                     </div>
-                    <div className="text-lg font-bold font-mono text-violet-200">
+                    <div className="text-xl font-bold font-mono text-violet-200">
                       {req.priorityScore.toFixed(1)} <span className="text-xs text-violet-400 font-normal">/100</span>
                     </div>
                   </div>
@@ -226,25 +278,25 @@ export default function ManagerRequestsPage() {
               )}
 
               {/* Custodian Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-2 border-t border-zinc-800/80">
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-zinc-800/80">
                 <button
                   type="button"
                   onClick={() => {
                     setActiveRequest(req);
                     setRejectModalOpen(true);
                   }}
-                  className="px-4 py-2 rounded-xl bg-slate-800/90 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-zinc-700 hover:border-rose-800/60 text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  className="px-4 py-2.5 rounded-xl bg-slate-800/90 hover:bg-rose-950/80 text-slate-300 hover:text-rose-200 border border-zinc-700 hover:border-rose-800 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                   <span>Reject with Justification</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleApprove(req.id)}
-                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 hover:scale-105"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/25 hover:scale-105 active:scale-95 cursor-pointer"
                 >
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <Check className="w-4 h-4 stroke-[3]" />
                   <span>1-Click Custodian Approval</span>
                 </button>
               </div>
@@ -256,7 +308,7 @@ export default function ManagerRequestsPage() {
 
       {/* Structured Rejection Modal */}
       {rejectModalOpen && activeRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
           <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-zinc-800 p-6 space-y-4 shadow-2xl">
             <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <XCircle className="w-4 h-4 text-rose-400" />
@@ -277,14 +329,14 @@ export default function ManagerRequestsPage() {
               <button
                 type="button"
                 onClick={() => setRejectModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleReject}
-                className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 text-xs font-bold cursor-pointer"
               >
                 Confirm Rejection
               </button>
@@ -296,4 +348,3 @@ export default function ManagerRequestsPage() {
     </div>
   );
 }
-

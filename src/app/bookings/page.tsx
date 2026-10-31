@@ -6,17 +6,15 @@ import { useAuth } from "@/context/auth-context";
 import { 
   CalendarCheck, 
   Clock, 
-  ArrowRight, 
+  MapPin, 
   ShieldCheck, 
   AlertTriangle, 
+  TrendingUp, 
   Fingerprint, 
-  CheckCircle2, 
-  Hourglass,
-  Layers,
-  MapPin,
-  TrendingUp,
-  FileCheck2,
-  XCircle
+  FileCheck2, 
+  ArrowRight,
+  Sparkles,
+  Hourglass
 } from "lucide-react";
 
 export interface BookingDisplay {
@@ -73,7 +71,22 @@ export default function BookingsPage() {
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
-          setBookings(data);
+          const mapped: BookingDisplay[] = data.map((b: any) => ({
+            id: b.id,
+            resourceId: b.resourceId,
+            resourceName: b.resourceName || b.resource?.name || "Equipment Asset",
+            category: b.category || b.resource?.category || "Lab Hardware",
+            location: b.location || b.resource?.location || "Campus Bay",
+            startTime: b.startTime ? new Date(b.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "02:00 PM",
+            endTime: b.endTime ? new Date(b.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "04:00 PM",
+            purpose: b.purpose || b.purposeDescription || "Academic Research",
+            academicContext: b.academicContext || "RESEARCH",
+            priorityScore: Number(b.priorityScore ?? b.calculatedPriorityScore ?? 50.0),
+            explainability: b.explainability || b.explainabilityReceipt || "Standard algorithmic fair-share queue allocation.",
+            status: b.status || "PENDING",
+            disputeSummary: b.dispute?.claimDescription
+          }));
+          setBookings(mapped);
         }
       })
       .catch(() => {});
@@ -199,7 +212,7 @@ export default function BookingsPage() {
               <div className="flex items-center justify-between text-slate-300">
                 <span className="flex items-center gap-1.5 text-violet-400 font-bold">
                   <TrendingUp className="w-3.5 h-3.5" />
-                  Priority Score: {booking.priorityScore.toFixed(1)} / 100
+                  Priority Score: {Number(booking.priorityScore ?? 0).toFixed(1)} / 100
                 </span>
                 <span className="text-[10px] text-slate-500">
                   Context: {booking.academicContext}
@@ -264,4 +277,3 @@ export default function BookingsPage() {
     </div>
   );
 }
-

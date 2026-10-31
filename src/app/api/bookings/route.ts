@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Compute waitlist queue rankings if applicable
-    const formatted = bookings.map((b) => ({
+    const formatted = bookings.map((b: any) => ({
       id: b.id,
       resourceId: b.resourceId,
       resourceName: b.resource.name,
@@ -180,8 +180,8 @@ export async function POST(req: NextRequest) {
     // 3. Verify Prerequisite Credential Gate
     const now = new Date();
     const activeBadgeCodes = user.badges
-      .filter((ub) => !ub.expiresAt || new Date(ub.expiresAt) > now)
-      .map((ub) => ub.badge.code);
+      .filter((ub: any) => !ub.expiresAt || new Date(ub.expiresAt) > now)
+      .map((ub: any) => ub.badge.code);
 
     let requiredBadges: string[] = [];
     try {

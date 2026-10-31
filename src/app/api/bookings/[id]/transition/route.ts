@@ -12,10 +12,10 @@ import { arbitrateWaitlistQueue } from '@/lib/fair-share-engine';
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const bookingId = params.id;
+    const { id: bookingId } = await params;
     const body = await req.json();
     const { action, actorId, reason, rejectionReason } = body;
 

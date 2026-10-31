@@ -6,77 +6,136 @@
   :root {
     --background: 222 47% 4%;
     --foreground: 210 40% 98%;
-    --card: 222 47% 7%;
+    --card: 222 47% 6%;
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 7%;
+    --popover: 222 47% 6%;
     --popover-foreground: 210 40% 98%;
     --primary: 158 64% 52%;
     --primary-foreground: 222 47% 4%;
     --secondary: 262 83% 58%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 15%;
+    --muted: 217 33% 12%;
     --muted-foreground: 215 20% 65%;
     --accent: 187 92% 45%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 18%;
-    --input: 217 33% 18%;
+    --border: 217 33% 16%;
+    --input: 217 33% 16%;
     --ring: 158 64% 52%;
-    --radius: 0.75rem;
+    --radius: 0.5rem;
   }
 }
 
 body {
   color: hsl(var(--foreground));
-  background: #020617;
+  background: #02040a;
   font-feature-settings: "rlig" 1, "calt" 1;
+  overflow-x: hidden;
 }
 
-/* Subtle Sci-Fi grid & scanline effects */
+/* Industrial Laboratory Matrix Grid */
 .bg-grid-pattern {
-  background-size: 32px 32px;
+  background-size: 28px 28px;
   background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
 }
 
+.bg-dot-pattern {
+  background-size: 24px 24px;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+}
+
+/* Precision Titanium / Slate Industrial Panel */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 15, 28, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
 }
 
+.industrial-card {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(9, 14, 26, 0.95) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  position: relative;
+  transition: all 0.25s ease-in-out;
+}
+
+.industrial-card:hover {
+  border-color: rgba(52, 211, 153, 0.35);
+  box-shadow: 0 12px 36px -8px rgba(16, 185, 129, 0.15);
+}
+
+/* Hazard Warning Accent Stripes */
+.hazard-stripe-amber {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(245, 158, 11, 0.15),
+    rgba(245, 158, 11, 0.15) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+}
+
+.hazard-stripe-red {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.15),
+    rgba(239, 68, 68, 0.15) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+}
+
+/* Glowing Telemetry Halos */
 .glow-emerald {
-  box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.25);
+  box-shadow: 0 0 25px -4px rgba(16, 185, 129, 0.35);
 }
 
 .glow-violet {
-  box-shadow: 0 0 25px -5px rgba(139, 92, 246, 0.25);
+  box-shadow: 0 0 25px -4px rgba(139, 92, 246, 0.35);
 }
 
 .glow-amber {
-  box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.25);
+  box-shadow: 0 0 25px -4px rgba(245, 158, 11, 0.35);
 }
 
 .glow-cyan {
-  box-shadow: 0 0 25px -5px rgba(6, 182, 212, 0.25);
+  box-shadow: 0 0 25px -4px rgba(6, 182, 212, 0.35);
 }
 
-/* Custom scrollbars */
+/* Monospace Laboratory Telemetry Readouts */
+.telemetry-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  letter-spacing: 0.05em;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+/* High-Tech Pulse Diodes */
+@keyframes diode-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.92); }
+}
+
+.diode-pulse-green {
+  animation: diode-pulse 2s infinite ease-in-out;
+}
+
+/* Precision Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #020617;
+  background: #02040a;
 }
 ::-webkit-scrollbar-thumb {
   background: #1e293b;
-  border-radius: 9999px;
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #10b981;
 }
-
