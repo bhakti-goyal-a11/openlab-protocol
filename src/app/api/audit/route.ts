@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyLedgerIntegrity } from "@/core/audit-logger";
+import { verifyLedgerChainIntegrity } from "@/lib/audit-logger";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
@@ -33,11 +35,10 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const result = await verifyLedgerIntegrity();
+    const result = await verifyLedgerChainIntegrity();
     return NextResponse.json(result);
   } catch (error) {
     console.error("Audit verification failed:", error);
     return NextResponse.json({ error: "Failed to verify ledger" }, { status: 500 });
   }
 }
-

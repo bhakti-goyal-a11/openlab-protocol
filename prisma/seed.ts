@@ -1,6 +1,13 @@
 import { PrismaClient } from '@prisma/client';
+import * as crypto from 'crypto';
 
 const prisma = new PrismaClient();
+
+function computeSha256(data: string): string {
+  return crypto.createHash('sha256').update(data, 'utf8').digest('hex');
+}
+
+const GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000';
 
 export async function seedDatabase() {
   console.log('--- Cleaning previous protocol data in reverse dependency order ---');
@@ -113,7 +120,7 @@ export async function seedDatabase() {
   const resCnc = await prisma.resource.create({
     data: {
       id: 'res_tormach_cnc',
-      name: 'Tormach PCNC 1100 Milling Machine',
+      name: 'Tormach PCNC 1100 CNC Mill',
       category: 'Subtractive CNC',
       custodianId: sharma.id,
       location: 'Fabrication Shop Bay 4',
@@ -128,7 +135,7 @@ export async function seedDatabase() {
   });
 
   // 2. Stratasys F370 Industrial 3D Printer
-  await prisma.resource.create({
+  const res3d = await prisma.resource.create({
     data: {
       id: 'res_stratasys_3d',
       name: 'Stratasys F370 Industrial 3D Printer',
@@ -145,11 +152,11 @@ export async function seedDatabase() {
     }
   });
 
-  // 3. Keysight Infiniium 4-Channel DSO
-  await prisma.resource.create({
+  // 3. Keysight Infiniium 4-Channel Oscilloscope
+  const resDso = await prisma.resource.create({
     data: {
       id: 'res_keysight_dso',
-      name: 'Keysight Infiniium 4-Channel DSO',
+      name: 'Keysight Infiniium 4-Channel Oscilloscope',
       category: 'Electronics & Test',
       custodianId: sharma.id,
       location: 'Microwave & RF Test Bench',
@@ -163,15 +170,15 @@ export async function seedDatabase() {
     }
   });
 
-  // 4. NVIDIA DGX H100 GPU Node
-  await prisma.resource.create({
+  // 4. NVIDIA DGX H100 GPU Node (Requires trustScore > 80)
+  const resGpu = await prisma.resource.create({
     data: {
       id: 'res_nvidia_h100',
       name: 'NVIDIA DGX H100 GPU Node',
       category: 'High Performance Compute',
       custodianId: sharma.id,
       location: 'AI Research Datacenter Rack 2',
-      description: '8x NVIDIA H100 SXM5 80GB GPUs with NVLink for LLM and scientific AI training.',
+      description: '8x NVIDIA H100 SXM5 80GB GPUs with NVLink for LLM and scientific AI training (Requires trustScore > 80).',
       imageUrl: '/demo-assets/cnc-baseline.svg',
       requiredBadges: JSON.stringify([]),
       supervisorRequired: false,
@@ -181,20 +188,149 @@ export async function seedDatabase() {
     }
   });
 
-  // Pre-seed an initial audit ledger genesis entry
-  await prisma.auditLedger.create({
+  console.log('--- Creating 2 Pre-existing Historical Bookings & Cryptographic Hash Chain ---');
+  // 1. Historical Booking 1: Completed & Returned session on Stratasys 3D Printer
+  const booking1StartTime = new Date(Date.now() - 2 * 24 * 3600 * 1000);
+  const booking1EndTime = new Date(Date.now() - 2 * 24 * 3600 * 1000 + 2 * 3600 * 1000);
+  const booking1 = await prisma.bookingRequest.create({
+    data: {
+      id: 'booking_hist_1',
+      resourceId: res3d.id,
+      borrowerId: aarav.id,
+      startTime: booking1StartTime,
+      endTime: booking1EndTime,
+      purposeDescription: 'Additive manufacturing of autonomous rover sensor brackets',
+      academicContext: 'CAPSTONE',
+      calculatedPriorityScore: 78.5,
+      explainabilityReceipt: 'Priority: 78.50/100 | Capstone clearance',
+      status: 'RETURNED'
+    }
+  });
+
+  // Check-In Log for Booking 1
+  const checkInPayload1 = computeSha256(
+    `${booking1.id}::${res3d.id}::CHECK_IN::${aarav.id}::${booking1StartTime.toISOString()}::{"bed_clear":true,"nozzle_calibrated":true}::`
+  );
+  await prisma.inspectionLog.create({
+    data: {
+      bookingId: booking1.id,
+      stage: 'CHECK_IN',
+      signedByUserId: aarav.id,
+      payloadHash: checkInPayload1,
+      checklistVector: JSON.stringify({ bed_clear: true, nozzle_calibrated: true }),
+      imageUrls: JSON.stringify(['/demo-assets/cnc-baseline.svg']),
+      notes: 'Initial check-in baseline verified.',
+      timestamp: booking1StartTime
+    }
+  });
+
+  // Check-Out Log for Booking 1
+  const checkOutPayload1 = computeSha256(
+    `${booking1.id}::${res3d.id}::CHECK_OUT::${aarav.id}::${booking1EndTime.toISOString()}::{"bed_clear":true,"nozzle_calibrated":true}::`
+  );
+  await prisma.inspectionLog.create({
+    data: {
+      bookingId: booking1.id,
+      stage: 'CHECK_OUT',
+      signedByUserId: aarav.id,
+      payloadHash: checkOutPayload1,
+      checklistVector: JSON.stringify({ bed_clear: true, nozzle_calibrated: true }),
+      imageUrls: JSON.stringify(['/demo-assets/cnc-baseline.svg']),
+      notes: 'Clean return inspection verified.',
+      timestamp: booking1EndTime
+    }
+  });
+
+  // 2. Historical Booking 2: Approved upcoming session on Keysight Oscilloscope
+  const booking2StartTime = new Date(Date.now() + 1 * 24 * 3600 * 1000);
+  const booking2EndTime = new Date(Date.now() + 1 * 24 * 3600 * 1000 + 2 * 3600 * 1000);
+  const booking2 = await prisma.bookingRequest.create({
+    data: {
+      id: 'booking_hist_2',
+      resourceId: resDso.id,
+      borrowerId: aarav.id,
+      startTime: booking2StartTime,
+      endTime: booking2EndTime,
+      purposeDescription: 'High-speed signal integrity and clock jitter verification',
+      academicContext: 'COURSEWORK',
+      calculatedPriorityScore: 74.2,
+      explainabilityReceipt: 'Priority: 74.20/100 | Coursework allocation',
+      status: 'APPROVED'
+    }
+  });
+
+  console.log('--- Initializing Cryptographic Audit Ledger Hash Chain ---');
+  // Block 0: Genesis Block
+  const genesisTimestamp = new Date(Date.now() - 3 * 24 * 3600 * 1000);
+  const genesisPayload = JSON.stringify({ message: 'OpenLab Protocol Node Initialized', nodeVersion: '1.0.0' });
+  const genesisHash = computeSha256(
+    `${GENESIS_HASH}::SYSTEM_GENESIS::${vandana.id}::${genesisPayload}::${genesisTimestamp.toISOString()}`
+  );
+
+  const block0 = await prisma.auditLedger.create({
     data: {
       eventType: 'SYSTEM_GENESIS',
       actorId: vandana.id,
-      payloadSnapshot: JSON.stringify({ message: 'OpenLab Protocol Node Initialized', nodeVersion: '1.0.0' }),
-      previousLedgerHash: '0000000000000000000000000000000000000000000000000000000000000000',
-      currentEntryHash: '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
-      timestamp: new Date()
+      payloadSnapshot: genesisPayload,
+      previousLedgerHash: GENESIS_HASH,
+      currentEntryHash: genesisHash,
+      timestamp: genesisTimestamp
+    }
+  });
+
+  // Block 1: Booking 1 Return Completed
+  const block1Timestamp = booking1EndTime;
+  const block1Payload = JSON.stringify({
+    bookingId: booking1.id,
+    resourceId: res3d.id,
+    borrowerId: aarav.id,
+    action: 'CLEAN_RETURN_COMPLETED'
+  });
+  const block1Hash = computeSha256(
+    `${block0.currentEntryHash}::BOOKING_RETURNED_CLEAN::${aarav.id}::${block1Payload}::${block1Timestamp.toISOString()}`
+  );
+
+  const block1 = await prisma.auditLedger.create({
+    data: {
+      bookingId: booking1.id,
+      eventType: 'BOOKING_RETURNED_CLEAN',
+      actorId: aarav.id,
+      payloadSnapshot: block1Payload,
+      previousLedgerHash: block0.currentEntryHash,
+      currentEntryHash: block1Hash,
+      timestamp: block1Timestamp
+    }
+  });
+
+  // Block 2: Booking 2 Approved by Custodian
+  const block2Timestamp = new Date(Date.now() - 1 * 24 * 3600 * 1000);
+  const block2Payload = JSON.stringify({
+    bookingId: booking2.id,
+    resourceId: resDso.id,
+    borrowerId: aarav.id,
+    action: 'CUSTODIAN_APPROVAL_GRANTED'
+  });
+  const block2Hash = computeSha256(
+    `${block1.currentEntryHash}::BOOKING_APPROVED::${sharma.id}::${block2Payload}::${block2Timestamp.toISOString()}`
+  );
+
+  await prisma.auditLedger.create({
+    data: {
+      bookingId: booking2.id,
+      eventType: 'BOOKING_APPROVED',
+      actorId: sharma.id,
+      payloadSnapshot: block2Payload,
+      previousLedgerHash: block1.currentEntryHash,
+      currentEntryHash: block2Hash,
+      timestamp: block2Timestamp
     }
   });
 
   console.log('--- Seed Completed Successfully ---');
   console.log(`Personas seeded: Aarav (${aarav.id}), Priya (${priya.id}), Prof. Sharma (${sharma.id}), Dean Vandana (${vandana.id})`);
+  console.log(`Resources seeded: CNC (${resCnc.id}), 3D Printer (${res3d.id}), Oscilloscope (${resDso.id}), DGX GPU (${resGpu.id})`);
+  console.log(`Historical Bookings seeded: ${booking1.id} (RETURNED), ${booking2.id} (APPROVED)`);
+  console.log(`Audit Ledger initialized with 3 chained cryptographic blocks (Genesis -> Return -> Approval)`);
 }
 
 seedDatabase()

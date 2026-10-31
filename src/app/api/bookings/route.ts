@@ -1,146 +1,290 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { logAuditEvent } from "@/core/audit-logger";
-import { transitionBookingState } from "@/core/state-machine";
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { calculateUserRollingHours, calculatePriorityScore } from '@/lib/fair-share-engine';
+import { logLedgerEntry } from '@/lib/audit-logger';
 
-export async function GET() {
+export const dynamic = 'force-dynamic';
+
+/**
+ * GET /api/bookings
+ * Returns bookings filtered by borrower (userId) or resource custodian (custodianId),
+ * with attached resource details, inspections, disputes, and queue rankings.
+ */
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('userId') || searchParams.get('borrowerId');
+    const custodianId = searchParams.get('custodianId');
+    const resourceId = searchParams.get('resourceId');
+    const status = searchParams.get('status');
+
+    const where: any = {};
+
+    if (userId) {
+      where.borrowerId = userId;
+    }
+
+    if (custodianId) {
+      where.resource = {
+        custodianId
+      };
+    }
+
+    if (resourceId) {
+      where.resourceId = resourceId;
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
     const bookings = await prisma.bookingRequest.findMany({
+      where,
       include: {
-        resource: true,
-        borrower: true,
-        dispute: true,
+        resource: {
+          select: {
+            id: true,
+            name: true,
+            category: true,
+            location: true,
+            imageUrl: true,
+            supervisorRequired: true,
+            custodian: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true
+              }
+            }
+          }
+        },
+        borrower: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            role: true,
+            department: true,
+            trustScore: true,
+            academicNeedWeight: true
+          }
+        },
+        inspections: {
+          select: {
+            id: true,
+            stage: true,
+            payloadHash: true,
+            checklistVector: true,
+            notes: true,
+            timestamp: true
+          }
+        },
+        dispute: true
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' }
     });
 
+    // Compute waitlist queue rankings if applicable
     const formatted = bookings.map((b) => ({
       id: b.id,
       resourceId: b.resourceId,
       resourceName: b.resource.name,
       category: b.resource.category,
       location: b.resource.location,
-      startTime: new Date(b.startTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
-      endTime: new Date(b.endTime).toLocaleString("en-US", { hour: "2-digit", minute: "2-digit" }),
-      purpose: b.purposeDescription,
+      imageUrl: b.resource.imageUrl,
+      custodian: b.resource.custodian,
+      borrower: b.borrower,
+      startTime: b.startTime.toISOString(),
+      endTime: b.endTime.toISOString(),
+      purposeDescription: b.purposeDescription,
       academicContext: b.academicContext,
-      priorityScore: b.calculatedPriorityScore,
-      explainability: b.explainabilityReceipt,
+      calculatedPriorityScore: b.calculatedPriorityScore,
+      explainabilityReceipt: b.explainabilityReceipt,
       status: b.status,
-      disputeSummary: b.dispute?.damageSummary,
+      inspections: b.inspections,
+      dispute: b.dispute,
+      createdAt: b.createdAt.toISOString()
     }));
 
     return NextResponse.json(formatted);
-  } catch (error) {
-    console.error("Failed to fetch bookings:", error);
-    return NextResponse.json({ error: "Failed to fetch bookings" }, { status: 500 });
+  } catch (error: any) {
+    console.error('Failed to fetch bookings:', error);
+    return NextResponse.json(
+      { error: 'Failed to retrieve bookings', details: error.message },
+      { status: 500 }
+    );
   }
 }
 
-export async function POST(req: Request) {
+/**
+ * POST /api/bookings
+ * Submits a new reservation request with:
+ * 1. Deterministic prerequisite competency badge gate.
+ * 2. Rolling weekly quota limit check.
+ * 3. Dynamic Fair-Share Priority Score calculation.
+ * 4. Slot collision detection (Allocated -> PENDING vs Collision -> WAITLISTED).
+ * 5. Tamper-evident AuditLedger block generation.
+ */
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, resourceId, startTime, endTime, purposeDescription, academicContext, priorityScore } = body;
+    const userId = body.userId || body.borrowerId;
+    const {
+      resourceId,
+      startTime,
+      endTime,
+      purposeDescription,
+      academicContext
+    } = body;
 
-    const resource = await prisma.resource.findUniqueOrThrow({ where: { id: resourceId } });
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!userId || !resourceId || !startTime || !endTime) {
+      return NextResponse.json(
+        { error: 'Missing required fields: userId, resourceId, startTime, endTime' },
+        { status: 400 }
+      );
+    }
 
-    const explainability = `Priority: ${priorityScore.toFixed(1)}/100 | Trust: ${user.trustScore} | Context: ${academicContext} | Verified Gate Passed.`;
+    const start = new Date(startTime);
+    const end = new Date(endTime);
 
+    if (end <= start) {
+      return NextResponse.json(
+        { error: 'Invalid time slot: endTime must be strictly after startTime' },
+        { status: 400 }
+      );
+    }
+
+    // 1. Fetch User and Active Badges
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        badges: {
+          include: { badge: true }
+        }
+      }
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: `User with ID '${userId}' not found` }, { status: 404 });
+    }
+
+    // 2. Fetch Resource
+    const resource = await prisma.resource.findUnique({
+      where: { id: resourceId }
+    });
+
+    if (!resource) {
+      return NextResponse.json({ error: `Resource with ID '${resourceId}' not found` }, { status: 404 });
+    }
+
+    // 3. Verify Prerequisite Credential Gate
+    const now = new Date();
+    const activeBadgeCodes = user.badges
+      .filter((ub) => !ub.expiresAt || new Date(ub.expiresAt) > now)
+      .map((ub) => ub.badge.code);
+
+    let requiredBadges: string[] = [];
+    try {
+      requiredBadges = JSON.parse(resource.requiredBadges);
+    } catch {
+      requiredBadges = [];
+    }
+
+    const missingBadges = requiredBadges.filter((b) => !activeBadgeCodes.includes(b));
+    if (missingBadges.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Prerequisite qualification gate blocked: User lacks certified badges',
+          isEligible: false,
+          missingBadges,
+          rejectionReason: `Missing required certifications: [${missingBadges.join(', ')}]`
+        },
+        { status: 403 }
+      );
+    }
+
+    // 4. Verify Weekly Quota
+    const currentRollingHours = await calculateUserRollingHours(user.id, resource.id);
+    const requestedHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+
+    if (currentRollingHours + requestedHours > resource.maxWeeklyHoursPerUser) {
+      return NextResponse.json(
+        {
+          error: `Weekly quota limit exceeded. User already utilized ${currentRollingHours.toFixed(1)} / ${resource.maxWeeklyHoursPerUser} hours this week.`,
+          currentRollingHours,
+          requestedHours,
+          maxWeeklyHours: resource.maxWeeklyHoursPerUser
+        },
+        { status: 400 }
+      );
+    }
+
+    // 5. Calculate Priority Score
+    const priorityResult = calculatePriorityScore({
+      trustScore: user.trustScore,
+      academicNeed: user.academicNeedWeight,
+      weeklyHours: currentRollingHours,
+      hoursSinceCheckout: 48
+    });
+
+    // 6. Detect Slot Collision
+    const collision = await prisma.bookingRequest.findFirst({
+      where: {
+        resourceId,
+        status: { in: ['APPROVED', 'ACTIVE', 'PENDING'] },
+        startTime: { lt: end },
+        endTime: { gt: start }
+      }
+    });
+
+    let bookingStatus = 'PENDING';
+    let explainability = priorityResult.receipt;
+
+    if (collision) {
+      bookingStatus = 'WAITLISTED';
+      explainability = `${priorityResult.receipt} | Status: WAITLISTED (Time collision with booking ${collision.id})`;
+    }
+
+    // 7. Persist Booking
     const booking = await prisma.bookingRequest.create({
       data: {
         resourceId,
-        borrowerId: userId,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
-        purposeDescription: purposeDescription || "Academic reservation",
-        academicContext: academicContext || "CAPSTONE",
-        calculatedPriorityScore: priorityScore || 50.0,
+        borrowerId: user.id,
+        startTime: start,
+        endTime: end,
+        purposeDescription: purposeDescription || 'Academic experimentation',
+        academicContext: academicContext || 'GENERAL_RESEARCH',
+        calculatedPriorityScore: priorityResult.score,
         explainabilityReceipt: explainability,
-        status: "APPROVED", // Auto-approve in demo mode so judges can immediately test check-in!
+        status: bookingStatus
       },
+      include: {
+        resource: true,
+        borrower: true
+      }
     });
 
-    await logAuditEvent({
-      bookingId: booking.id,
-      eventType: "BOOKING_REQUESTED",
-      actorId: userId,
-      payload: {
-        priorityScore,
-        explainability,
-        status: booking.status,
+    // 8. Log REQUEST_SUBMITTED to AuditLedger
+    await logLedgerEntry(
+      'REQUEST_SUBMITTED',
+      user.id,
+      {
+        bookingId: booking.id,
+        resourceId: resource.id,
+        resourceName: resource.name,
+        calculatedPriorityScore: priorityResult.score,
+        status: bookingStatus,
+        timeSlot: { start: start.toISOString(), end: end.toISOString() }
       },
-    });
+      booking.id
+    );
 
-    return NextResponse.json(booking);
+    return NextResponse.json(booking, { status: 201 });
   } catch (error: any) {
-    console.error("Booking creation failed:", error);
-    return NextResponse.json({ error: error.message || "Failed to create booking" }, { status: 500 });
+    console.error('Booking request failed:', error);
+    return NextResponse.json(
+      { error: 'Failed to process booking request', details: error.message },
+      { status: 500 }
+    );
   }
 }
-
-export async function PUT(req: Request) {
-  try {
-    const body = await req.json();
-    const { bookingId, action, userId, payloadHash, checklist, notes, damageSummary, trustPenalty } = body;
-
-    if (action === "CHECK_IN") {
-      const booking = await prisma.bookingRequest.findUniqueOrThrow({ where: { id: bookingId } });
-
-      await prisma.inspectionLog.create({
-        data: {
-          bookingId,
-          stage: "CHECK_IN",
-          signedByUserId: userId,
-          payloadHash: payloadHash || "7f83b165...demo",
-          checklistVector: JSON.stringify(checklist || {}),
-          imageUrls: JSON.stringify(["/demo-assets/cnc-baseline.svg"]),
-          notes: notes || "Check-in baseline captured.",
-        },
-      });
-
-      const updated = await transitionBookingState(bookingId, "ACTIVE", userId, "CHECK_IN", notes);
-      return NextResponse.json(updated);
-    }
-
-    if (action === "RETURN_CLEAN") {
-      const updated = await transitionBookingState(bookingId, "RETURNED", userId, "RETURN_CLEAN", notes || "Normal clean handover.");
-      return NextResponse.json(updated);
-    }
-
-    if (action === "FLAG_DISPUTE") {
-      const booking = await prisma.bookingRequest.findUniqueOrThrow({ where: { id: bookingId } });
-
-      await prisma.disputeTicket.create({
-        data: {
-          bookingId,
-          reporterId: userId,
-          severity: "MEDIUM",
-          damageSummary: damageSummary || "Damage reported during visual diff inspection.",
-          evidenceImageUrls: JSON.stringify(["/demo-assets/collet-fracture.svg"]),
-          trustScorePenalty: trustPenalty || 15.0,
-        },
-      });
-
-      // Deduct trust points from borrower
-      await prisma.user.update({
-        where: { id: booking.borrowerId },
-        data: { trustScore: { decrement: trustPenalty || 15.0 } },
-      });
-
-      const updated = await transitionBookingState(bookingId, "DISPUTED", userId, "FLAG_DISPUTE", damageSummary);
-      return NextResponse.json(updated);
-    }
-
-    if (action === "APPROVE") {
-      const updated = await transitionBookingState(bookingId, "APPROVED", userId, "APPROVE", notes || "Approved by custodian.");
-      return NextResponse.json(updated);
-    }
-
-    return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
-  } catch (error: any) {
-    console.error("Booking transition failed:", error);
-    return NextResponse.json({ error: error.message || "Failed to transition booking" }, { status: 500 });
-  }
-}
-
